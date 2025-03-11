@@ -20,7 +20,7 @@ class ProxySetupApp:
 
         tk.Label(self.proxy_frame, text="代理地址:").grid(row=0, column=0)
         self.proxy_addr = tk.Entry(self.proxy_frame)
-        self.proxy_addr.insert(0, '10.211.55.2')
+        self.proxy_addr.insert(0, '127.0.0.1')
         self.proxy_addr.grid(row=0, column=1)
 
         tk.Label(self.proxy_frame, text="端口:").grid(row=1, column=0)
@@ -32,9 +32,23 @@ class ProxySetupApp:
         self.proxy_exclude = tk.Entry(self.proxy_frame)
         self.proxy_exclude.grid(row=2, column=1)
 
+        # 新增：网络测试地址输入框
+        tk.Label(self.proxy_frame, text="网络测试地址:").grid(row=3, column=0)
+        self.test_url = tk.Entry(self.proxy_frame)
+        self.test_url.insert(0, 'https://www.google.com')
+        self.test_url.grid(row=3, column=1)
+
+        # 新增：是否忽略 SSL 验证的复选框
+        self.ignore_ssl_var = tk.IntVar()
+        tk.Checkbutton(self.proxy_frame, text="忽略 SSL 验证", variable=self.ignore_ssl_var).grid(row=4, column=0, columnspan=2)
+        # 新增：自定义 CA 证书路径输入框
+        tk.Label(self.proxy_frame, text="自定义 CA 证书路径:").grid(row=5, column=0)
+        self.ca_cert_path = tk.Entry(self.proxy_frame)
+        self.ca_cert_path.grid(row=5, column=1)
+
         # 代理状态标签
         self.status_label = tk.Label(self.proxy_frame, text="代理状态: 未知")
-        self.status_label.grid(row=3, column=0, columnspan=2)
+        self.status_label.grid(row=6, column=0, columnspan=2)
         self.update_proxy_status()
 
         # 控制按钮
@@ -74,11 +88,47 @@ class ProxySetupApp:
 
     def test_connection(self):
         try:
-            response = requests.get("http://www.google.com", timeout=5)
+            test_url = self.test_url.get()
+            ignore_ssl = self.ignore_ssl_var.get()
+            ca_cert = self.ca_cert_path.get().strip()  # 增加strip处理
+            
+            # 新增代理配置获取
+            proxy_host = self.proxy_addr.get()
+            proxy_port = self.proxy_port.get()
+            proxies = {
+                "http": f"http://{proxy_host}:{proxy_port}",
+                "https": f"http://{proxy_host}:{proxy_port}"
+            } if proxy_host and proxy_port else None
+
+            # 增加证书路径验证
+            if ca_cert and not os.path.exists(ca_cert):
+                raise FileNotFoundError(f"CA证书路径不存在: {ca_cert}")
+
+            if ignore_ssl:
+                verify = False
+            elif ca_cert:
+                verify = ca_cert
+            else:
+                verify = True
+
+            response = requests.get(test_url, 
+                                   timeout=5, 
+                                   verify=verify,
+                                   proxies=proxies)  # 添加proxies参数
             if response.status_code == 200:
                 messagebox.showinfo("成功", "网络连接正常！")
             else:
                 messagebox.showwarning("警告", "网络连接存在问题")
+        except FileNotFoundError as e:
+            messagebox.showerror("证书错误", f"证书路径错误: {str(e)}")
+        except requests.exceptions.ProxyError as e:
+            messagebox.showerror("代理错误", f"无法连接到代理服务器: {proxy_host}:{proxy_port}\n{str(e)}, 请检查代理设置是否正确")
+        except requests.exceptions.Timeout as e:
+            messagebox.showerror("超时错误", f"连接超时: {str(e)}")
+        except requests.exceptions.ConnectionError as e:
+            messagebox.showerror("连接错误", f"无法连接到服务器: {str(e)}")
+        except requests.exceptions.SSLError as e:
+            messagebox.showerror("SSL 错误", f"SSL 验证失败: {str(e)}")
         except Exception as e:
             messagebox.showerror("错误", f"网络连接失败: {str(e)}")
 
